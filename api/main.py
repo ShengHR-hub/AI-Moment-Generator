@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from qcloud_cos import CosConfig, CosS3Client
 
 # 从你的 config.py 中导入 API 密钥
-from config import (
+from api.config import (
     COS_SECRET_ID,
     COS_SECRET_KEY,
     COS_REGION,
