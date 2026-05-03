@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI 朋友圈文案生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+    
+    <style>
+        /* 宇宙深空背景 */
+        body {
+            background-color: #0b0c10;
+            background-image: 
+                radial-gradient(circle at 15% 30%, rgba(76, 29, 149, 0.25), transparent 40%),
+                radial-gradient(circle at 85% 70%, rgba(30, 64, 175, 0.25), transparent 50%);
+            background-attachment: fixed;
+            color: #e0e2eb;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+        
+        /* 极致玻璃拟态 (Glassmorphism) */
+        .glass-panel {
+            background: rgba(20, 22, 32, 0.45); /* 高通透背景 */
+            backdrop-filter: blur(24px); /* 强烈的毛玻璃虚化 */
+            -webkit-backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.08); /* 边缘微光 */
+            /* 内发光与深层阴影，营造拟物玻璃的厚度感 */
+            box-shadow: 
+                0 30px 60px -12px rgba(0, 0, 0, 0.6), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+        }
+        
+        /* 自定义微型滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, 0.15); border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(255, 255, 255, 0.25); }
+
+        /* ======== 核心：弹簧回弹阻尼物理动效 ======== */
+        :root {
+            /* 经过调校的阻尼弹簧曲线：初速快，轻微超出边界后平滑回弹 */
+            --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        /* 基础弹簧交互控件 (按钮、标签) */
+        .spring-interactive {
+            transition: all 0.6s var(--spring-easing);
+            will-change: transform;
+        }
+
+        .spring-interactive:hover:not(:disabled) {
+            transform: scale(1.04);
+            box-shadow: 0 12px 25px -5px rgba(139, 92, 246, 0.4);
+        }
+
+        /* 按压时取消弹簧延迟，产生强阻尼感的迅速回缩 */
+        .spring-interactive:active:not(:disabled) {
+            transform: scale(0.96);
+            transition: all 0.1s ease-out;
+        }
+
+        /* 拖拽上传区的专属物理反馈 */
+        .drag-spring {
+            transition: all 0.5s var(--spring-easing);
+        }
+        .drag-spring.is-active {
+            transform: scale(1.03);
+            border-color: #a855f7;
+            background-color: rgba(168, 85, 247, 0.15);
+            box-shadow: inset 0 0 20px rgba(168, 85, 247, 0.2);
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center p-4 md:p-8 antialiased min-h-screen">
+
+    <div id="app" class="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-6 md:gap-8 pt-4 md:pt-10">
+        
+        <div class="glass-panel rounded-3xl p-6 md:p-8 flex flex-col h-auto md:h-[680px]">
+            <h1 class="text-3xl font-bold tracking-wider mb-2 bg-clip-text text-transparent bg-gradient-to-r from-purple-400 to-pink-300 drop-shadow-md">
+                AI Moment ✨
+            </h1>
+            <p class="text-gray-400 text-sm mb-6">上传你的影像，让通义千问为你注入灵魂文案。</p>
+
+            <div 
+                class="drag-spring relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer overflow-hidden group h-48 flex-shrink-0"
+                :class="isDragging ? 'is-active' : 'border-gray-600 hover:border-purple-400'"
+                @click="triggerUpload"
+                @dragover.prevent="isDragging = true"
+                @dragleave.prevent="isDragging = false"
+                @drop.prevent="handleDrop"
+            >
+                <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" class="hidden">
+                
+                <template v-if="!previewUrl">
+                    <svg class="w-10 h-10 mb-3 transition-colors duration-300" :class="isDragging ? 'text-purple-400' : 'text-gray-500 group-hover:text-purple-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
+                    <span class="transition-colors font-medium tracking-wide text-sm" :class="isDragging ? 'text-purple-300' : 'text-gray-400 group-hover:text-purple-300'">
+                        {{ isDragging ? '松开鼠标即可吸附图片' : '点击或拖拽上传图片' }}
+                    </span>
+                </template>
+                
+                <template v-else>
+                    <img :src="previewUrl" class="absolute inset-0 w-full h-full object-cover opacity-85 transition-transform duration-700 group-hover:scale-110" alt="Preview">
+                    <div class="absolute inset-0 bg-black bg-opacity-40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                        <span class="text-white font-medium bg-black bg-opacity-50 px-5 py-2.5 rounded-xl backdrop-blur-md">重新选择图片</span>
+                    </div>
+                </template>
+            </div>
+
+            <div class="mt-6">
+                <label class="block text-sm font-medium text-gray-300 mb-3 drop-shadow">设定文案风格</label>
+                <div class="flex flex-wrap gap-2">
+                    <button 
+                        v-for="style in predefinedStyles" 
+                        :key="style"
+                        @click="selectedStyle = style"
+                        :class="['spring-interactive px-4 py-1.5 rounded-full text-sm font-medium border', 
+                                 selectedStyle === style ? 'bg-purple-600 border-purple-500 text-white shadow-[0_0_15px_rgba(147,51,234,0.4)]' : 'bg-transparent border-gray-600 text-gray-400 hover:text-gray-200']"
+                    >
+                        {{ style }}
+                    </button>
+                </div>
+            </div>
+
+            <div class="mt-5 flex-1 flex flex-col">
+                <label class="block text-sm font-medium text-gray-300 mb-2 drop-shadow">补充自定义细节 (可选)</label>
+                <textarea 
+                    v-model="userDirection" 
+                    class="w-full flex-1 bg-black bg-opacity-30 text-gray-200 border border-gray-700 rounded-2xl p-4 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 resize-none text-sm transition-colors duration-300"
+                    placeholder="例如：要简短一点、加上定位在西安、以第一人称口吻写..."
+                ></textarea>
+            </div>
+
+            <button 
+                @click="generateCopy" 
+                :disabled="isLoading || !file"
+                class="spring-interactive mt-6 w-full bg-gradient-to-r from-purple-600 to-indigo-600 text-white font-bold py-4 px-6 rounded-2xl disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center flex-shrink-0 shadow-lg"
+            >
+                <svg v-if="isLoading" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                {{ isLoading ? 'AI 大脑高速运转中...' : '生成专属文案' }}
+            </button>
+        </div>
+
+        <div ref="resultArea" class="glass-panel rounded-3xl p-6 md:p-8 flex flex-col h-auto min-h-[400px] md:h-[680px] relative overflow-hidden">
+            
+            <div v-if="!resultText && !isLoading" class="flex-1 flex flex-col items-center justify-center text-gray-500">
+                <svg class="w-16 h-16 mb-4 opacity-20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                <p class="tracking-wide text-sm">灵感结果将在这里浮现</p>
+            </div>
+
+            <div v-else-if="isLoading" class="flex-1 flex flex-col items-center justify-center">
+                <div class="w-16 h-16 border-4 border-purple-500 border-t-transparent rounded-full animate-spin shadow-[0_0_15px_rgba(168,85,247,0.5)]"></div>
+                <p class="mt-6 text-purple-400 animate-pulse tracking-widest text-sm drop-shadow-md">正在通过云端网络解析影像特征...</p>
+            </div>
+
+            <div v-else class="flex-1 overflow-y-auto pr-2">
+                <div class="flex items-center space-x-3 mb-6">
+                    <div class="w-1.5 h-8 bg-gradient-to-b from-purple-400 to-indigo-500 rounded-full shadow-[0_0_8px_rgba(168,85,247,0.8)]"></div>
+                    <h2 class="text-xl font-bold text-white tracking-wider">创作输出</h2>
+                </div>
+                
+                <div class="text-gray-200 leading-loose whitespace-pre-wrap font-light text-lg">
+                    {{ resultText }}
+                </div>
+
+                <div class="mt-10 pt-6 border-t border-gray-700 border-opacity-50">
+                    <p class="text-xs text-gray-500 tracking-wider">云端影像备份归档：</p>
+                    <a :href="resultImageUrl" target="_blank" class="text-xs text-purple-400 hover:text-purple-300 break-all truncate block mt-2 transition-colors">
+                        {{ resultImageUrl }}
+                    </a>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        const { createApp, ref } = Vue;
+
+        createApp({
+            setup() {
+                const fileInput = ref(null);
+                const file = ref(null);
+                const previewUrl = ref(null);
+                const resultArea = ref(null); // DOM 引用，用于页面滚动
+                
+                const predefinedStyles = ['文艺诗意', '幽默搞笑', '优美短句', '日常随记', '发疯文学'];
+                const selectedStyle = ref('文艺诗意');
+                const userDirection = ref(""); 
+                
+                const isDragging = ref(false);
+                const isLoading = ref(false);
+                const resultText = ref("");
+                const resultImageUrl = ref("");
+
+                const triggerUpload = () => fileInput.value.click();
+
+                const handleFileChange = (e) => {
+                    const selectedFile = e.target.files[0];
+                    if (selectedFile) {
+                        file.value = selectedFile;
+                        previewUrl.value = URL.createObjectURL(selectedFile);
+                    }
+                };
+
+                const handleDrop = (e) => {
+                    isDragging.value = false;
+                    const droppedFiles = e.dataTransfer.files;
+                    if (droppedFiles.length > 0) {
+                        const selectedFile = droppedFiles[0];
+                        if (selectedFile.type.startsWith('image/')) {
+                            file.value = selectedFile;
+                            previewUrl.value = URL.createObjectURL(selectedFile);
+                        } else {
+                            alert("格式不支持，请投放图片文件！");
+                        }
+                    }
+                };
+
+                const generateCopy = async () => {
+                    if (!file.value) return;
+                    
+                    isLoading.value = true;
+                    resultText.value = "";
+                    
+                    // 构建发送给大模型的结构化 Prompt
+                    let finalPrompt = `请严格使用【${selectedStyle.value}】的风格来生成。`;
+                    if (userDirection.value.trim() !== '') {
+                        finalPrompt += `用户的具体要求是：${userDirection.value}`;
+                    }
+                    
+                    const formData = new FormData();
+                    formData.append("image", file.value);
+                    formData.append("user_direction", finalPrompt);
+
+                    try {
+                        const response = await fetch("http://127.0.0.1:8000/api/generate", {
+                            method: "POST",
+                            body: formData
+                        });
+
+                        const res = await response.json();
+                        
+                        if (res.code === 0) {
+                            resultText.value = res.data.ai_copywriting;
+                            resultImageUrl.value = res.data.cos_url;
+                            
+                            // 移动端体验优化：生成成功后，带有阻尼感地平滑滚动到底部结果区域
+                            setTimeout(() => {
+                                resultArea.value?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                            }, 150);
+                            
+                        } else {
+                            alert("生成出错了：" + res.message);
+                        }
+                    } catch (error) {
+                        console.error(error);
+                        alert("网络请求失败！请检查后端环境。");
+                    } finally {
+                        isLoading.value = false;
+                    }
+                };
+
+                return { 
+                    fileInput, file, previewUrl, resultArea,
+                    predefinedStyles, selectedStyle, userDirection,
+                    isDragging, isLoading, resultText, resultImageUrl, 
+                    triggerUpload, handleFileChange, handleDrop, generateCopy 
+                };
+            }
+        }).mount('#app')
+    </script>
+</body>
+</html>

@@ -1,0 +1,11 @@
+fastapi
+uvicorn
+python-multipart
+cos-python-sdk-v5
+dashscope# FastAPI 后端核心依赖
+fastapi==0.115.0
+uvicorn==0.30.6
+python-multipart==0.0.9
+
+# 腾讯云 COS Python SDK
+cos-python-sdk-v5==1.9.30
