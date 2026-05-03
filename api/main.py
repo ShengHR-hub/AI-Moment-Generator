@@ -1,5 +1,6 @@
 import uuid
 import os
+import asyncio
 
 import dashscope
 from dashscope import MultiModalConversation
@@ -37,7 +38,7 @@ def get_cos_client():
     return cos_client
 
 # 移除 lifespan 参数
-app = FastAPI(title="AI Moment Caption Generator", version="0.1.2")
+app = FastAPI(title="AI Moment Caption Generator", version="0.2.0")
 
 # CORS 配置保持不变
 app.add_middleware(
@@ -65,19 +66,23 @@ def upload_file_to_cos(file_bytes: bytes, filename: str) -> str:
     )
     return f"https://{COS_BUCKET}.cos.{COS_REGION}.myqcloud.com/{key}"
 
-def call_qwen_ai(image_url: str, user_direction: str) -> str:
-    """调用通义千问多模态模型生成文案"""
+
+def call_qwen_ai(image_urls: list[str], user_direction: str) -> str:
+    """调用通义千问多模态模型生成文案，支持多图"""
+    # 构建 user content：每张图片一个 image 块 + 最后一个 text 块
+    user_content = []
+    for url in image_urls:
+        user_content.append({"image": url})
+    user_content.append({"text": f"用户对文案的具体要求或描述是：{user_direction}。请结合所有图片生成文案。"})
+
     messages = [
         {
             "role": "system",
-            "content": [{"text": "你是一个精通中国年轻人互联网语境的社交媒体文案大师。请观察图片并结合用户要求，生成3条风格迥异、带有Emoji且自然的微信朋友圈文案。"}]
+            "content": [{"text": "你是一个精通中国年轻人互联网语境的社交媒体文案大师。请观察用户提供的所有图片并结合用户要求，生成3条风格迥异、带有Emoji且自然的微信朋友圈文案。请综合所有图片的内容来生成，让文案能够涵盖多张图片的共同主题或故事。"}]
         },
         {
             "role": "user",
-            "content": [
-                {"image": image_url},
-                {"text": f"用户对文案的具体要求或描述是：{user_direction}。请开始生成。"}
-            ]
+            "content": user_content
         }
     ]
     
@@ -91,32 +96,44 @@ def call_qwen_ai(image_url: str, user_direction: str) -> str:
     else:
         raise Exception(f"AI 生成失败: {response.code} - {response.message}")
 
+
 # ---------------------------------------------------------------------------
 # 业务接口
 # ---------------------------------------------------------------------------
 @app.post("/api/generate")
 async def generate(
-    image: UploadFile = File(..., description="用户上传的图片文件"),
+    images: list[UploadFile] = File(..., description="用户上传的图片文件（支持多张）"),
     user_direction: str = Form(..., description="用户期望的文案风格或补充描述"),
 ):
-    # 1. 读取并校验图片
-    file_bytes = await image.read()
-    if not file_bytes:
-        raise HTTPException(status_code=400, detail="上传的图片文件为空")
+    # 1. 校验图片数量
+    if not images or len(images) == 0:
+        raise HTTPException(status_code=400, detail="请至少上传一张图片")
+    
+    if len(images) > 9:
+        raise HTTPException(status_code=400, detail="最多支持上传 9 张图片")
 
     try:
-        # 2. 图片云端化：上传到 COS 获取公网访问 URL
-        cos_url = upload_file_to_cos(file_bytes, image.filename)
-        
-        # 3. AI 创作：将图片 URL 和用户指令喂给多模态大模型
-        ai_copywriting = call_qwen_ai(cos_url, user_direction)
+        # 2. 读取所有图片并上传到 COS
+        cos_urls = []
+        for image in images:
+            file_bytes = await image.read()
+            if not file_bytes:
+                continue
+            cos_url = upload_file_to_cos(file_bytes, image.filename)
+            cos_urls.append(cos_url)
+
+        if not cos_urls:
+            raise HTTPException(status_code=400, detail="所有上传的图片文件均为空")
+
+        # 3. AI 创作：将所有图片 URL 和用户指令喂给多模态大模型
+        ai_copywriting = call_qwen_ai(cos_urls, user_direction)
         
         # 4. 返回完整数据给前端
         return {
             "code": 0,
             "message": "success",
             "data": {
-                "cos_url": cos_url,
+                "cos_urls": cos_urls,
                 "user_direction": user_direction,
                 "ai_copywriting": ai_copywriting
             },
