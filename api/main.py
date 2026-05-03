@@ -1,6 +1,5 @@
 import uuid
 import os
-from contextlib import asynccontextmanager
 
 import dashscope
 from dashscope import MultiModalConversation
@@ -8,7 +7,7 @@ from fastapi import FastAPI, File, Form, UploadFile, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from qcloud_cos import CosConfig, CosS3Client
 
-# 从你的 config.py 中导入新增的 QWEN_API_KEY
+# 从你的 config.py 中导入 API 密钥
 from config import (
     COS_SECRET_ID,
     COS_SECRET_KEY,
@@ -19,30 +18,28 @@ from config import (
 )
 
 # ---------------------------------------------------------------------------
-# 初始化与配置
+# 初始化与配置 (移除 lifespan，改用懒加载)
 # ---------------------------------------------------------------------------
 cos_client: CosS3Client | None = None
-# 初始化通义千问 API 密钥
 dashscope.api_key = QWEN_API_KEY
 
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    """应用生命周期：启动时初始化 COS 客户端。"""
+def get_cos_client():
+    """懒加载获取 COS 客户端，专治 Serverless 环境"""
     global cos_client
-    config = CosConfig(
-        Region=COS_REGION,
-        SecretId=COS_SECRET_ID,
-        SecretKey=COS_SECRET_KEY,
-    )
-    cos_client = CosS3Client(config)
-    print("✅ 腾讯云 COS 客户端已初始化")
-    yield
-    cos_client = None
-    print("🔒 腾讯云 COS 客户端已关闭")
+    if cos_client is None:
+        config = CosConfig(
+            Region=COS_REGION,
+            SecretId=COS_SECRET_ID,
+            SecretKey=COS_SECRET_KEY,
+        )
+        cos_client = CosS3Client(config)
+        print("✅ 腾讯云 COS 客户端已初始化 (懒加载)")
+    return cos_client
 
-app = FastAPI(title="AI Moment Caption Generator", version="0.1.1", lifespan=lifespan)
+# 移除 lifespan 参数
+app = FastAPI(title="AI Moment Caption Generator", version="0.1.2")
 
-# CORS 配置
+# CORS 配置保持不变
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -58,7 +55,10 @@ def upload_file_to_cos(file_bytes: bytes, filename: str) -> str:
     """将文件上传到 COS 并返回公网 URL"""
     ext = os.path.splitext(filename)[1]
     key = f"{COS_UPLOAD_PREFIX}{uuid.uuid4().hex}{ext}"
-    cos_client.put_object(
+    
+    # 每次调用时获取客户端
+    client = get_cos_client()
+    client.put_object(
         Bucket=COS_BUCKET,
         Body=file_bytes,
         Key=key,
@@ -87,7 +87,6 @@ def call_qwen_ai(image_url: str, user_direction: str) -> str:
     )
 
     if response.status_code == 200:
-        # 提取模型生成的文本内容
         return response.output.choices[0].message.content[0]['text']
     else:
         raise Exception(f"AI 生成失败: {response.code} - {response.message}")
@@ -112,12 +111,6 @@ async def generate(
         # 3. AI 创作：将图片 URL 和用户指令喂给多模态大模型
         ai_copywriting = call_qwen_ai(cos_url, user_direction)
         
-        # 日志打印（便于开发调试）
-        print("-" * 30)
-        print(f"DEBUG: 图片已托管至 -> {cos_url}")
-        print(f"DEBUG: 最终生成文案 -> \n{ai_copywriting}")
-        print("-" * 30)
-
         # 4. 返回完整数据给前端
         return {
             "code": 0,
@@ -131,6 +124,7 @@ async def generate(
 
     except Exception as e:
         # 统一错误处理
+        print(f"❌ 运行异常: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/health")
