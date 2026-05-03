@@ -296,12 +296,9 @@
                     previewUrls.value.splice(index, 1);
                 };
 
-                // Canvas 图片压缩：限制最长边 + 控制质量
-                const compressImage = (file) => {
+                // Canvas 图片压缩（核心函数，支持指定参数）
+                const compressImageWithParams = (file, maxEdge, quality) => {
                     return new Promise((resolve, reject) => {
-                        const MAX_LONG_EDGE = 1920;
-                        const QUALITY = 0.85;
-
                         const reader = new FileReader();
                         reader.readAsDataURL(file);
                         reader.onerror = () => reject(new Error('Failed to read file'));
@@ -312,8 +309,8 @@
                                 try {
                                     let { width, height } = img;
 
-                                    if (width > MAX_LONG_EDGE || height > MAX_LONG_EDGE) {
-                                        const ratio = Math.min(MAX_LONG_EDGE / width, MAX_LONG_EDGE / height);
+                                    if (width > maxEdge || height > maxEdge) {
+                                        const ratio = Math.min(maxEdge / width, maxEdge / height);
                                         width = Math.round(width * ratio);
                                         height = Math.round(height * ratio);
                                     }
@@ -334,7 +331,7 @@
                                             resolve(compressed);
                                         },
                                         'image/jpeg',
-                                        QUALITY
+                                        quality
                                     );
                                 } catch (err) {
                                     reject(err);
@@ -343,6 +340,24 @@
                             img.src = e.target.result;
                         };
                     });
+                };
+
+                // 分层降级压缩：正常压缩 → 激进压缩 → 报错
+                const compressImage = async (file) => {
+                    try {
+                        // 第一层：正常压缩（1920px, 0.85）
+                        return await compressImageWithParams(file, 1920, 0.85);
+                    } catch (e1) {
+                        console.warn('[WARN] 正常压缩失败，尝试激进压缩:', e1.message);
+                        try {
+                            // 第二层：激进压缩（1024px, 0.6）
+                            return await compressImageWithParams(file, 1024, 0.6);
+                        } catch (e2) {
+                            console.error('[ERROR] 激进压缩也失败:', e2.message);
+                            // 第三层：提示用户更换图片
+                            throw new Error('图片处理失败，请尝试更换一张较小的图片');
+                        }
+                    }
                 };
 
                 const generateCopy = async () => {
