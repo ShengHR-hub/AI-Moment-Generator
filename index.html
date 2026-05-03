@@ -21,11 +21,10 @@
         
         /* 极致玻璃拟态 (Glassmorphism) */
         .glass-panel {
-            background: rgba(20, 22, 32, 0.45); /* 高通透背景 */
-            backdrop-filter: blur(24px); /* 强烈的毛玻璃虚化 */
+            background: rgba(20, 22, 32, 0.45);
+            backdrop-filter: blur(24px);
             -webkit-backdrop-filter: blur(24px);
-            border: 1px solid rgba(255, 255, 255, 0.08); /* 边缘微光 */
-            /* 内发光与深层阴影，营造拟物玻璃的厚度感 */
+            border: 1px solid rgba(255, 255, 255, 0.08);
             box-shadow: 
                 0 30px 60px -12px rgba(0, 0, 0, 0.6), 
                 inset 0 1px 1px rgba(255, 255, 255, 0.15);
@@ -39,11 +38,9 @@
 
         /* ======== 核心：弹簧回弹阻尼物理动效 ======== */
         :root {
-            /* 经过调校的阻尼弹簧曲线：初速快，轻微超出边界后平滑回弹 */
             --spring-easing: cubic-bezier(0.34, 1.56, 0.64, 1);
         }
 
-        /* 基础弹簧交互控件 (按钮、标签) */
         .spring-interactive {
             transition: all 0.6s var(--spring-easing);
             will-change: transform;
@@ -54,13 +51,11 @@
             box-shadow: 0 12px 25px -5px rgba(139, 92, 246, 0.4);
         }
 
-        /* 按压时取消弹簧延迟，产生强阻尼感的迅速回缩 */
         .spring-interactive:active:not(:disabled) {
             transform: scale(0.96);
             transition: all 0.1s ease-out;
         }
 
-        /* 拖拽上传区的专属物理反馈 */
         .drag-spring {
             transition: all 0.5s var(--spring-easing);
         }
@@ -92,21 +87,28 @@
             position: absolute;
             top: 4px;
             right: 4px;
-            width: 22px;
-            height: 22px;
-            background: rgba(0, 0, 0, 0.65);
+            width: 26px;
+            height: 26px;
+            background: rgba(0, 0, 0, 0.7);
             color: white;
+            border: 1.5px solid rgba(255, 255, 255, 0.4);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             font-size: 14px;
             cursor: pointer;
-            opacity: 0;
             transition: opacity 0.2s;
+            z-index: 10;
         }
-        .preview-thumb:hover .remove-btn {
-            opacity: 1;
+        /* 桌面端：hover 时显示删除按钮 */
+        @media (hover: hover) and (pointer: fine) {
+            .preview-thumb .remove-btn { opacity: 0; }
+            .preview-thumb:hover .remove-btn { opacity: 1; }
+        }
+        /* 移动端触屏设备：始终显示删除按钮 */
+        @media (hover: none), (pointer: coarse) {
+            .preview-thumb .remove-btn { opacity: 1; }
         }
     </style>
 </head>
@@ -120,7 +122,7 @@
             </h1>
             <p class="text-gray-400 text-sm mb-6">上传你的影像（最多9张），让通义千问为你注入灵魂文案。</p>
 
-            <!-- 多图上传区 -->
+            <!-- 多图上传区（空状态） -->
             <div v-if="previewUrls.length === 0"
                 class="drag-spring relative border-2 border-dashed rounded-2xl flex flex-col items-center justify-center cursor-pointer overflow-hidden group h-48 flex-shrink-0"
                 :class="isDragging ? 'is-active' : 'border-gray-600 hover:border-purple-400'"
@@ -129,8 +131,6 @@
                 @dragleave.prevent="isDragging = false"
                 @drop.prevent="handleDrop"
             >
-                <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" multiple class="hidden">
-                
                 <svg class="w-10 h-10 mb-3 transition-colors duration-300" :class="isDragging ? 'text-purple-400' : 'text-gray-500 group-hover:text-purple-400'" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"></path></svg>
                 <span class="transition-colors font-medium tracking-wide text-sm" :class="isDragging ? 'text-purple-300' : 'text-gray-400 group-hover:text-purple-300'">
                     {{ isDragging ? '松开鼠标即可吸附图片' : '点击或拖拽上传图片（支持多选）' }}
@@ -148,12 +148,11 @@
                     <!-- 添加更多图片按钮 -->
                     <div v-if="previewUrls.length < 9"
                         class="aspect-square rounded-xl border-2 border-dashed border-gray-600 hover:border-purple-400 flex items-center justify-center cursor-pointer transition-colors"
-                        @click="triggerUpload"
+                        @click.stop="triggerUpload"
                     >
-                        <svg class="w-8 h-8 text-gray-500 hover:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+                        <svg class="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
                     </div>
                 </div>
-                <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" multiple class="hidden">
                 <p class="text-xs text-gray-500 mt-2 text-center">已选 {{ previewUrls.length }} 张图片，点击 ✕ 移除</p>
             </div>
 
@@ -229,6 +228,10 @@
 
     </div>
 
+    <!-- 全局唯一的隐藏 file input（修复移动端双 ref 冲突） -->
+    <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" multiple
+        style="position:fixed;top:-9999px;left:-9999px;width:0;height:0;opacity:0;pointer-events:none;">
+
     <script>
         const { createApp, ref } = Vue;
 
@@ -248,25 +251,34 @@
                 const resultText = ref("");
                 const resultImageUrls = ref([]);
 
-                const triggerUpload = () => fileInput.value.click();
+                const triggerUpload = () => {
+                    if (fileInput.value) {
+                        fileInput.value.value = '';
+                        fileInput.value.click();
+                    }
+                };
 
                 // 将新选择的文件追加到列表中（不超过9张）
                 const addFiles = (newFiles) => {
                     const MAX_COUNT = 9;
+                    let added = 0;
                     for (const f of newFiles) {
                         if (files.value.length >= MAX_COUNT) break;
                         if (!f.type.startsWith('image/')) continue;
                         files.value.push(f);
                         previewUrls.value.push(URL.createObjectURL(f));
+                        added++;
                     }
-                    if (newFiles.length + files.value.length > MAX_COUNT) {
+                    if (files.value.length >= MAX_COUNT && newFiles.length > added) {
                         alert(`最多支持 ${MAX_COUNT} 张图片，已自动截取前 ${MAX_COUNT} 张。`);
                     }
                 };
 
                 const handleFileChange = (e) => {
-                    addFiles(e.target.files);
-                    // 重置 input 以便可以再次选择相同文件
+                    const selectedFiles = e.target.files;
+                    if (selectedFiles && selectedFiles.length > 0) {
+                        addFiles(selectedFiles);
+                    }
                     e.target.value = '';
                 };
 
@@ -292,40 +304,44 @@
 
                         const reader = new FileReader();
                         reader.readAsDataURL(file);
+                        reader.onerror = () => reject(new Error('Failed to read file'));
                         reader.onload = (e) => {
                             const img = new Image();
-                            img.src = e.target.result;
+                            img.onerror = () => reject(new Error('Failed to load image'));
                             img.onload = () => {
-                                let { width, height } = img;
+                                try {
+                                    let { width, height } = img;
 
-                                if (width > MAX_LONG_EDGE || height > MAX_LONG_EDGE) {
-                                    const ratio = Math.min(MAX_LONG_EDGE / width, MAX_LONG_EDGE / height);
-                                    width = Math.round(width * ratio);
-                                    height = Math.round(height * ratio);
+                                    if (width > MAX_LONG_EDGE || height > MAX_LONG_EDGE) {
+                                        const ratio = Math.min(MAX_LONG_EDGE / width, MAX_LONG_EDGE / height);
+                                        width = Math.round(width * ratio);
+                                        height = Math.round(height * ratio);
+                                    }
+
+                                    const canvas = document.createElement('canvas');
+                                    canvas.width = width;
+                                    canvas.height = height;
+                                    const ctx = canvas.getContext('2d');
+                                    ctx.drawImage(img, 0, 0, width, height);
+
+                                    canvas.toBlob(
+                                        (blob) => {
+                                            if (!blob) {
+                                                reject(new Error('Canvas compression failed'));
+                                                return;
+                                            }
+                                            const compressed = new File([blob], file.name || 'image.jpg', { type: 'image/jpeg' });
+                                            resolve(compressed);
+                                        },
+                                        'image/jpeg',
+                                        QUALITY
+                                    );
+                                } catch (err) {
+                                    reject(err);
                                 }
-
-                                const canvas = document.createElement('canvas');
-                                canvas.width = width;
-                                canvas.height = height;
-                                const ctx = canvas.getContext('2d');
-                                ctx.drawImage(img, 0, 0, width, height);
-
-                                canvas.toBlob(
-                                    (blob) => {
-                                        if (!blob) {
-                                            reject(new Error('Canvas compression failed'));
-                                            return;
-                                        }
-                                        const compressed = new File([blob], file.name || 'image.jpg', { type: 'image/jpeg' });
-                                        resolve(compressed);
-                                    },
-                                    'image/jpeg',
-                                    QUALITY
-                                );
                             };
-                            img.onerror = reject;
+                            img.src = e.target.result;
                         };
-                        reader.onerror = reject;
                     });
                 };
 
@@ -342,10 +358,12 @@
                     }
 
                     try {
-                        // 并行压缩所有图片
-                        const compressedFiles = await Promise.all(
-                            files.value.map(f => compressImage(f))
-                        );
+                        // 串行压缩所有图片（避免移动端内存溢出）
+                        const compressedFiles = [];
+                        for (const f of files.value) {
+                            const compressed = await compressImage(f);
+                            compressedFiles.push(compressed);
+                        }
                         
                         const formData = new FormData();
                         compressedFiles.forEach(f => {
@@ -373,7 +391,7 @@
                         }
                     } catch (error) {
                         console.error(error);
-                        alert("网络请求失败！请检查后端环境。");
+                        alert("网络请求失败：" + (error.message || "请检查后端环境"));
                     } finally {
                         isLoading.value = false;
                     }
