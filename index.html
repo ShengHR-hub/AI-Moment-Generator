@@ -226,11 +226,11 @@
             </div>
         </div>
 
-    </div>
-
-    <!-- 全局唯一的隐藏 file input（修复移动端双 ref 冲突） -->
+    <!-- 全局唯一的隐藏 file input（必须在 #app 内部才能被 Vue 管理） -->
     <input type="file" ref="fileInput" @change="handleFileChange" accept="image/*" multiple
         style="position:fixed;top:-9999px;left:-9999px;width:0;height:0;opacity:0;pointer-events:none;">
+
+    </div>
 
     <script>
         const { createApp, ref } = Vue;
